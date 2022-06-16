@@ -1,0 +1,19 @@
+ENPM663 - RWA3 - Group 4
+------------------------
+
+INSTRUCTIONS TO RUN THE PACKAGE: 
+1> Navigate to the catkin workspace source folder and unzip the group4_rwa4 package. 
+
+2> In ARIAC package installed on the system go to gantry_moveit_config -> config -> kinematics.yaml change gantry_full kinematics solver to kdl_kinematics_plugin/KDLKinematicsPlugin 
+
+3> Open a new terminal and navigate to the catkin workspace. 
+
+4> Type catkin build to build the workspace 
+
+5> Type source devel/setup.bash from the root of the workspace to source it. 
+
+6> Type roslaunch group4_rwa4 ariac.launch to start the environment. 
+
+7> In another terminal Repeat Steps3-4 and type rosrun group4_rwa4 rwa4 to launch the node.    
+
+

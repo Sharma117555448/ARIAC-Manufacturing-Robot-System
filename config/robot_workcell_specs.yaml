@@ -1,0 +1,207 @@
+# kitting_arm
+  # - linear_arm_actuator_joint
+  # - shoulder_pan_joint
+  # - shoulder_lift_joint
+  # - elbow_joint
+  # - wrist_1_joint
+  # - wrist_2_joint
+  # - wrist_3_joint
+  # For the gantry_torso group, the joints are:
+  #   - small_long_joint
+  #   - torso_rail_joint
+  #   - torso_base_main_joint
+  # For the gantry_arm group, the joints are:
+  # - gantry_arm_shoulder_pan_joint
+  # - gantry_arm_shoulder_lift_joint
+  # - gantry_arm_elbow_joint
+  # - gantry_arm_wrist_1_joint
+  # - gantry_arm_wrist_2_joint
+  # - gantry_arm_wrist_3_joint
+preset_locations:
+  belt_pickup:
+    kitting_arm: [0.1, 0, -0.76, 1.83, -1.13, 0, 0]
+    gantry_full: [-8.75, 3.00, 1.63, 3.10, -1.13, 0.0, -0.20, 1.63, 2.01]
+    gantry_torso: [-8.75, 3.00, 1.63 ]
+    gantry_arm: [3.10, -1.13, 0.0, -0.20, 1.63, 2.01]
+
+  home:
+    kitting_arm: [0, 0, -1.25, 1.74, -2.04, -1.57, 0]
+    gantry_full: [-2.45, 0.0, 0.0, -0.01, -1.10, 1.84, -0.71, 1.54, 0.83]
+    gantry_torso: [-2.45, 0.0, 0.0]
+    gantry_arm: [-0.01, -1.10, 1.84, -0.71, 1.54, 0.83]
+  bin1:
+    kitting_arm: [2.78, 2.14, -1.25, 1.74, -2.04, -1.57, 0]
+    gantry_full: [-0.09, -2.45, 0.0, 0, -1.13, 1.88, -0.72, 1.55, 0.83]
+    gantry_torso: [-0.09, -2.45, 0.0]
+    gantry_arm: [0, -1.13, 1.88, -0.72, 1.55, 0.83]
+  bin2:
+    kitting_arm: [2.02, 2.14, -1.25, 1.74, -2.04, -1.57, 0]
+    gantry_full: [-0.09, -2.45, 0.0, 0, -1.13, 1.88, -0.72, 1.55, 0.83]
+    gantry_torso: [-0.09, -2.45, 0.0]
+    gantry_arm: [0, -1.13, 1.88, -0.72, 1.55, 0.83]
+  bin5:
+    kitting_arm: [-3.45, 2.87, -1.25, 1.74, -2.04, -1.57, 0]
+    gantry_full: [-0.09, -2.45, 0.0, 0, -1.13, 1.88, -0.72, 1.55, 0.83]
+    gantry_torso: [-0.09, -2.45, 0.0]
+    gantry_arm: [0, -1.13, 1.88, -0.72, 1.55, 0.83]
+  bin6:
+    kitting_arm: [-3.45, 2.87, -1.25, 1.74, -2.04, -1.57, 0]
+    gantry_full: [-0.09, -2.45, 0.0, 0, -1.13, 1.88, -0.72, 1.55, 0.83]
+    gantry_torso: [-0.09, -2.45, 0.0]
+    gantry_arm: [0, -1.13, 1.88, -0.72, 1.55, 0.83]
+  bin8:
+    kitting_arm: [-3.45, 2.87, -1.25, 1.74, -2.04, -1.57, 0]
+    gantry_full: [-0.09, -2.45, 0.0, 0, -1.13, 1.88, -0.72, 1.55, 0.83]
+    gantry_torso: [-0.09, -2.45, 0.0]
+    gantry_arm: [0, -1.13, 1.88, -0.72, 1.55, 0.83]
+  agv1:
+    kitting_arm: [4.22, 2.14, -1.25, 1.74, -2.04, -1.57, 0]
+    gantry_full: [0.07, -3.73, -0.02, 0.07, -1.13, 1.88, -0.72, 1.55, 0.83]
+    gantry_torso: [0.07, -3.73, -0.02]
+    gantry_arm: [0.07, -1.13, 1.88, -0.72, 1.55, 0.83]
+  agv2:
+    kitting_arm: [1.81, 2.14, -1.25, 1.74, -2.04, -1.57, 0]
+    gantry_full: [0.07, -3.73, -0.02, 0.07, -1.13, 1.88, -0.72, 1.55, 0.83]
+    gantry_torso: [0.07, -3.73, -0.02]
+    gantry_arm: [0.07, -1.13, 1.88, -0.72, 1.55, 0.83]
+  agv3:
+    kitting_arm: [-0.78, 2.14, -1.25, 1.74, -2.04, -1.57, 0]
+    gantry_full: [0.07, -3.73, -0.02, 0.07, -1.13, 1.88, -0.72, 1.55, 0.83]
+    gantry_torso: [0.07, -3.73, -0.02]
+    gantry_arm: [0.07, -1.13, 1.88, -0.72, 1.55, 0.83]
+  agv4:
+    kitting_arm: [-3.0, 2.14, -1.25, 1.74, -2.04, -1.57, 0]
+    gantry_full: [0.07, -3.73, -0.02, 0.07, -1.13, 1.88, -0.72, 1.55, 0.83]
+    gantry_torso: [0.07, -3.73, -0.02]
+    gantry_arm: [0.07, -1.13, 1.88, -0.72, 1.55, 0.83]
+  gripper_station:
+    kitting_arm: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    gantry_full: [-1.80, -6.17, 0.0, -0.01, -1.10, 1.84, -0.71, 1.54, 0.83]
+    gantry_torso: [-1.80, -6.17, 0.0]
+    gantry_arm: [-0.01, -1.10, 1.84, -0.71, 1.54, 0.83]
+  table_2:
+    kitting_arm: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    gantry_full: [-3.40, -5.03, 0, -0.01, -1.10, 1.84, -0.71, 1.54, 0.83]
+    gantry_torso: [-3.40, -5.03, 0]
+    gantry_arm: [-0.01, -1.10, 1.84, -0.71, 1.54, 0.83]
+  table_1:
+    kitting_arm: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    gantry_full: [-4.44, -5.15, 0, -0.01, -1.10, 1.84, -0.71, 1.54, 0.83]
+    gantry_torso: [-4.44, -5.15, 0]
+    gantry_arm: [-0.01, -1.10, 1.84, -0.71, 1.54, 0.83]
+  pre_agv1:
+    kitting_arm: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    gantry_full: [-1.45, -2.52, 0, -0.01, -1.10, 1.84, -0.71, 1.54, 0.83]
+    gantry_torso: [-1.45, -2.52, 0]
+    gantry_arm: [-0.01, -1.10, 1.84, -0.71, 1.54, 0.83]
+  post_agv1:
+    kitting_arm: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    gantry_full: [-1.45, -2.52, 0, -0.01, -1.10, 1.84, -0.71, 1.54, 0.83]
+    gantry_torso: [-1.45, -2.52, 0]
+    gantry_arm: [-0.01, -1.10, 1.84, -0.71, 1.54, 0.83]
+  at_agv1:
+    kitting_arm: [4.22, 2.14, -1.25, 1.74, -2.09, -1.57, 0]
+    gantry_full: [0.18, -3.92, 0, -0.01, -1.10, 1.84, -0.71, 1.54, 0.83]
+    gantry_torso: [0.18, -3.92, 0]
+    gantry_arm: [-0.01, -1.10, 1.84, -0.71, 1.54, 0.83]
+  agv1_att_as1:
+    kitting_arm: [4.22, 2.14, -1.25, 1.74, -2.09, -1.57, 0.0]
+    gantry_full: [-3.41, -3.56, 0.0, 1.0, 0 , -1.13 , 1.88 ,-0.72 ,1.55 ,0.83]
+    gantry_torso: [-3.41, -3.56, 0.0]
+    gantry_arm: [0 , -1.13 , 1.88 ,-0.72 ,1.55 ,0.83]
+  agv1_at_as1:
+    kitting_arm: [4.22, 2.14, -1.25, 1.74, -2.09, -1.57, 0.0]
+    gantry_full: [-3.0, -3.5, 0.0, 0 , -1.13 , 1.88 ,-0.72 ,1.55 ,0.83]
+    gantry_torso: [-3.0, -3.5, 0.0]
+    gantry_arm: [0 , -1.13 , 1.88 ,-0.72 ,1.55 ,0.83]
+  agv1_at_as2:
+    kitting_arm: [4.22,2.14,-1.25,1.74,-2.09,-1.57,0]
+    gantry_full: [-8.44, -3.5, 0.0, 0 , -1.13 , 1.88 ,-0.72 ,1.55 ,0.83 ]
+    gantry_torso: [-8.44, -3.5, 0.0]
+    gantry_arm: [0 , -1.13 , 1.88 ,-0.72 ,1.55 ,0.83]
+  agv2_at_as1:
+    kitting_arm: [4.22,2.14,-1.25,1.74,-2.09,-1.57,0]
+    gantry_full: [-2.72 , -1.26 , 1.57, 0 , -1.13 , 1.88 ,-0.72 ,1.55 ,0.83]
+    gantry_torso: [-2.72 , -1.26 , 1.57]
+    gantry_arm: [0 , -1.13 , 1.88 ,-0.72 ,1.55 ,0.83]
+  agv2_at_as2:
+    kitting_arm: [4.22,2.14,-1.25,1.74,-2.09,-1.57,0]
+    gantry_full: [-8.0, -2.4, 2.4, 0 , -1.13 , 1.88 ,-0.72 ,1.55 ,0.83]
+    gantry_torso: [-8.0, -2.4, 2.4]
+    gantry_arm: [0 , -1.13 , 1.88 ,-0.72 ,1.55 ,0.83]
+  agv3_at_as3:
+    kitting_arm: [4.22,2.14,-1.25,1.74,-2.09,-1.57,0]
+    gantry_full: [-3.0, 2.45, 0.0, 0 , -1.13 , 1.88 ,-0.72 ,1.55 ,0.83]
+    gantry_torso: [-3.0, 2.45, 0.0]
+    gantry_arm: [0 , -1.13 , 1.88 ,-0.72 ,1.55 ,0.83]
+  agv3_at_as4:
+    kitting_arm: [4.22,2.14,-1.25,1.74,-2.09,-1.57,0]
+    gantry_full: [-8.3, 2.4, 0.0, 0 , -1.13 , 1.88 ,-0.72 ,1.55 ,0.83]
+    gantry_torso: [-8.3, 2.4, 0.0,]
+    gantry_arm: [0 , -1.13 , 1.88 ,-0.72 ,1.55 ,0.83]
+  agv4_at_as3:
+    kitting_arm: [4.22,2.14,-1.25,1.74,-2.09,-1.57,0]
+    gantry_full: [-2.72 , -1.26, 1.57 ,0 , -1.13 , 1.88 ,-0.72 ,1.55 ,2.4]
+    gantry_torso: [-2.72 , -1.26, 1.57]
+    gantry_arm: [0 , -1.13 , 1.88 ,-0.72 ,1.55 ,0.83 ]
+  agv4_at_as4:
+    kitting_arm: [4.22,2.14,-1.25,1.74,-2.09,-1.57,0]
+    gantry_full: [-8.0, 3.5, 2.4, 0 , -1.13 , 1.88 ,-0.72 ,1.55 ,0.83]
+    gantry_torso: [-8.0, 3.5, 2.4]
+    gantry_arm: [0 , -1.13 , 1.88 ,-0.72 ,1.55 ,0.83]
+  as1:
+    kitting_arm: [4.22, 2.14, -1.25, 1.74, -2.09,-1.57, 0]
+    gantry_full: [-3.70, -3.04, 1.63, 3.10, -1.13, 0.0 ,-0.20, 1.63, 2.01]
+    gantry_torso: [-3.70, -3.04, 1.63]
+    gantry_arm: [3.10, -1.13, 0.0, -0.20, 1.63, 2.01]
+  as2: 
+    kitting_arm: [4.22, 2.14, -1.25, 1.74, -2.09, -1.57, 0]
+    gantry_full: [-8.63, 1.76, -3.22, 3.10, -1.13, 0.0, -0.20, 1.63, 2.01]
+    gantry_torso: [-8.63, -3.22, 1.76]
+    gantry_arm: [3.10, -1.13, 0.0, -0.20, 1.63, 2.01]
+  as3:
+    kitting_arm: [4.22, 2.14, -1.25, 1.74, -2.09, -1.57, 0]
+    gantry_full: [-3.74, 3.0, 1.65, 3.10, -1.13, 0.0, -0.20, 1.63, 2.01]
+    gantry_torso: [-3.74, 3.0, 1.65]
+    gantry_arm: [3.10, -1.13, 0.0, -0.20, 1.63, 2.01]
+  as4:
+    kitting_arm: [4.22, 2.14, -1.25, 1.74, -2.09, -1.57, 0]
+    gantry_full: [-8.75, 3.00, 1.63, 3.10, -1.13, 0.0, -0.20, 1.63, 2.01]
+    gantry_torso: [-8.75, 3.00, 1.63 ]
+    gantry_arm: [3.10, -1.13, 0.0, -0.20, 1.63, 2.01]
+
+
+bins:
+  height: 0.75
+agvs:
+  height: 0.77
+parts:
+  assembly_battery_red:
+    height: 0.79
+  assembly_battery_green:
+    height: 0.79
+  assembly_battery_blue:
+    height: 0.79
+  assembly_sensor_red:
+    height: 0.83
+  assembly_sensor_green:
+    height: 0.83
+  assembly_sensor_blue:
+    height: 0.83
+  assembly_regulator_red:
+    height: 0.81
+  assembly_regulator_green:
+    height: 0.81
+  assembly_regulator_blue:
+    height: 0.81
+  assembly_pump_red:
+    height: 0.86
+  assembly_pump_green:
+    height: 0.86
+  assembly_pump_blue:
+    height: 0.86
+gripper_changing_station:
+  min_x: -4.25
+  max_x: -3.60
+  min_y: 5.50
+  max_y: 6.90

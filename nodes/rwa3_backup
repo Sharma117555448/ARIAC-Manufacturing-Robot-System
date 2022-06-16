@@ -1,0 +1,1215 @@
+#!/usr/bin/env python
+
+from calendar import c
+import rospy
+import os
+# custom modules
+from group4_rwa3.gripper_manager import GripperManager
+from group4_rwa3.competitor import Competitor
+from group4_rwa3.conversion import euler_to_quaternion
+# nist
+from nist_gear.srv import GetMaterialLocations
+from nist_gear.msg import Model, LogicalCameraImage
+# ros
+
+import tf2_ros
+from geometry_msgs.msg import TransformStamped
+from std_msgs.msg import String
+from tf.transformations import quaternion_multiply, quaternion_from_euler, euler_from_quaternion
+# moveit
+import moveit_commander as mc
+
+import moveit_msgs.msg
+import moveit_msgs.srv
+import sensor_msgs.msg
+
+
+# python
+import sys
+import copy
+import yaml
+import re
+import yaml
+import math
+
+current_parts_kitting = {}
+current_parts_assembly = {}
+
+# def check_valid():
+#     req = moveit_msgs.srv.GetStateValidityRequest()
+#     state_valid_service = rospy.ServiceProxy('check_state_validity',  moveit_msgs.srv.GetStateValidity)
+#     req.robot_state = moveit_msgs.msg.RobotState()
+#     req.robot_state.joint_state = sensor_msgs.msg.JointState()
+#     res = state_valid_service(req)
+#     return res.valid
+def camera_check(): 
+    
+   
+    tf_buffer = tf2_ros.Buffer()
+    tf_listener = tf2_ros.TransformListener(tf_buffer)
+    rospy.wait_for_message("/ariac/logical_camera_belt_1", LogicalCameraImage)
+    
+    # e.g., logical_camera_1_assembly_pump_red_1
+    
+    camera_frame_format = r"logical_camera_belt+_(\w+)_[0-9]+_frame"
+    all_frames = yaml.safe_load(tf_buffer.all_frames_as_yaml()).keys()
+    part_frames = [f for f in all_frames if re.match(camera_frame_format, f)]
+    
+    for frame in part_frames:
+        try:
+            world_tf = tf_buffer.lookup_transform(
+                'world',
+                frame,
+                rospy.Time(),
+                rospy.Duration(0.1)
+            )
+        except (tf2_ros.LookupException, tf2_ros.ExtrapolationException) as e:
+            continue
+
+            # remove stale transforms
+        tf_time = rospy.Time(
+            world_tf.header.stamp.secs,
+            world_tf.header.stamp.nsecs
+        )
+        if rospy.Time.now() - tf_time > rospy.Duration(1.0):
+            continue
+        model = Model()
+        model.type = re.match(camera_frame_format, frame).group(1)
+        model.pose.position = world_tf.transform.translation
+        model.pose.orientation = world_tf.transform.rotation
+        
+        return model
+
+def addmoreparts(competitor, orders): 
+    count = 0
+    product_type = ""
+    while(len(orders)!=0): 
+        order = orders.pop()
+        for shipment in order.kitting_shipments: 
+            all_known_objects = get_object_pose_in_workcell()
+            products = competitor.process_kitting_shipment(shipment)
+            available_part_type = [part.type for part in all_known_objects]
+            for product in products:
+                if(product.type not in available_part_type):
+                    product_type = product.type
+                    count += 1
+            # for product in products:
+                
+
+
+    return product_type, count*2 
+
+def belt_pickup(moveit_runner_kitting, moveit_runner_gantry, part_type, count):
+    
+    all_known_objects = get_object_pose_in_workcell()
+    empty_bins = detect_empty_bins(all_known_objects)
+    sorted_bins = sorted(empty_bins.keys())
+    empty_bin_final = sorted_bins[1]
+    empty_bin_temp = sorted_bins[0]
+    gm = GripperManager(ns='/ariac/kitting/arm/gripper/')
+            
+    group = moveit_runner_kitting.groups['kitting_arm']
+
+    bin_pose = [(0.1, 0.1), (-0.1, -0.1), (0.1, -0.1), (-0.1, 0.1)]
+
+    for index in range(count): 
+
+        moveit_runner_kitting.go_home()
+        while(True):
+            pose = camera_check()
+            if(pose):
+                if(2 > pose.pose.position.y > 1.2):
+                    break
+        moveit_runner_kitting.goto_preset_location("belt_pickup", robot_type="kitting_robot")
+
+        # moveit_runner_kitting.goto_preset_location('belt_pickup', robot_type="kitting_robot")
+
+        gripper_status = gm.activate_gripper()
+        if not gripper_status:
+            assert(gm.activate_gripper()), "Could not activate gripper"
+        
+        while(not gm.is_object_attached()):
+            pass
+
+        moveit_runner_kitting.go_home()
+
+        quaternion = quaternion_from_euler(3.14, 0, 0)
+        center_pose = Model()
+        center_pose.pose.position.x = empty_bins[empty_bin_temp][0]
+        center_pose.pose.position.y = empty_bins[empty_bin_temp][1]
+        center_pose.pose.position.z = 0.9
+        center_pose.pose.orientation.x = quaternion[0]
+        center_pose.pose.orientation.y = quaternion[1]
+        center_pose.pose.orientation.z = quaternion[2]
+        center_pose.pose.orientation.w = quaternion[3]
+        
+        # location_pose = group.get_current_joint_values()
+        # print(location_pose)
+        # moveit_runner_kitting.go_home()
+        
+        moveit_runner_kitting.goto_preset_location(empty_bin_temp, robot_type="kitting_robot")
+        (plan, partial) = group.compute_cartesian_path([center_pose.pose], 0.001, 0.0)
+        group.execute(plan, wait=True)
+        
+        
+        gm.deactivate_gripper()
+
+        # product_init = find_flipped_part_pose((empty_bin_temp, empty_bins[empty_bin_temp]), part_type)
+        # quaternion1 = quaternion_from_euler(-1.57, 0, 0)
+        # center_pose_final1 = copy.deepcopy(center_pose)
+        # center_pose_final1.pose.position.x = empty_bins[empty_bin_final][0]
+        # center_pose_final1.pose.orientation.x = quaternion1[0]
+        # center_pose_final1.pose.orientation.y = quaternion1[1]
+        # center_pose_final1.pose.orientation.z = quaternion1[2]
+        # center_pose_final1.pose.orientation.w = quaternion1[3]
+        # center_pose_final1.pose.position.y = empty_bins[empty_bin_final][1]
+        # fail = moveit_runner_kitting.move_part(
+        #     part_type,
+        #     empty_bin_temp,
+        #     product_init,
+        #     center_pose_final1,
+        #     empty_bin_temp)
+        
+        
+        product_init = find_flipped_part_pose((empty_bin_temp, empty_bins[empty_bin_temp]), part_type)
+        # print(product_init)
+        quaternion2 = quaternion_from_euler(0, 0, 0)
+        center_pose_final = copy.deepcopy(center_pose)
+        center_pose_final.pose.position.x = empty_bins[empty_bin_final][0] + bin_pose[index][0]
+        center_pose_final.pose.orientation.x = quaternion2[0]
+        center_pose_final.pose.orientation.y = quaternion2[1]
+        center_pose_final.pose.orientation.z = quaternion2[2]
+        center_pose_final.pose.orientation.w = quaternion2[3]
+        center_pose_final.pose.position.z = 0.75
+        center_pose_final.pose.position.y = empty_bins[empty_bin_final][1] + bin_pose[index][1]
+        fail = moveit_runner_kitting.move_part(
+            part_type,
+            empty_bin_temp,
+            product_init,
+            center_pose_final,
+            empty_bin_final, backup=[(empty_bin_temp, empty_bins[empty_bin_temp]), part_type])
+
+        moveit_runner_kitting.go_home()
+
+
+def isBlackoutTriggered():
+    try:
+        data = rospy.wait_for_message("/ariac/logical_camera_1", LogicalCameraImage,1).models
+        return False
+
+    except rospy.ROSException as e:
+        rospy.logwarn("Sensor Blackout")
+        return True
+
+def detect_empty_bins(all_known_objects):
+    bins = { 
+        "bin1": (-1.89,3.38),
+        "bin2": (-1.89,2.56),
+        "bin5": (-1.89,-3.38),
+        "bin6": (-1.89,-2.56),
+        }
+    empty_bins = {}
+    for key, value in bins.items():
+        counter = 0
+        for obj in all_known_objects:
+            if(abs(abs(value[0]) - abs(obj.pose.position.x)) < 0.3 and abs(abs(value[1]) - abs(obj.pose.position.y)) < 0.3):
+                counter += 1
+                break
+        if(counter == 0):
+            empty_bins[key] = value
+
+    return empty_bins
+        
+            
+    
+   
+def execute_order(competitor, high_priority_order, moveit_runner_kitting, moveit_runner_gantry, empty_bins, flag=False, execute_h_order=True, sensor_black_out=False):
+    if(not flag):
+        orders = competitor.orders
+    else:
+        orders = high_priority_order
+    # belt_pickup(moveit_runner_kitting)
+    while(len(orders) != 0):
+        order = orders.pop()
+        moveit_runner_kitting.go_home()
+        rospy.loginfo("Number of kitting shipment to complete: {0}".format(
+            len(order.kitting_shipments)))
+        rospy.loginfo("Number of Assembly shipment to complete: {0}".format(
+            len(order.assembly_shipments)))
+        
+        candidate_types = {}
+        for shipment in order.kitting_shipments:
+            # Get all objects in detected by logical cameras
+            if(sensor_black_out):
+                all_known_objects = current_parts_kitting
+            else:
+                all_known_objects = get_object_pose_in_workcell()
+
+            # retrieve the agv to use
+            active_agv = shipment.agv_id
+            # retrieve the shipping type, e.g., order_0_kitting_0
+            shipment_type = shipment.shipment_type
+            # retrieve the assembly station to submit the agv
+            assembly_station = shipment.station_id
+
+            # TASK KITTING ROBOT TO GET THE PARTS In THE SHIPMENT
+            # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            products = competitor.process_kitting_shipment(shipment)
+            # list of unique product types
+            unique_product_types = []
+
+            for product in products:
+                if product.type not in unique_product_types:
+                    unique_product_types.append(product.type)
+
+            counter = 0
+            for product_type in unique_product_types:
+                counter = 0
+                candidate_types[product_type] = {}
+                candidate_parts = {}
+                for part_in_workcell in all_known_objects:
+                    if product_type == part_in_workcell.type:
+                        counter += 1
+                        candidate_parts[product_type +
+                                        str(counter)] = [part_in_workcell]
+                candidate_types[product_type] = candidate_parts
+            while(len(products) != 0):
+                sensor_black_out = isBlackoutTriggered()
+                if(competitor.high_priority and execute_h_order):
+                    high_priority_order = list()
+                    high_priority_order.append(competitor.orders.pop())
+                    print("\n")
+                    rospy.loginfo("High Priority Order Detected")
+                    print("\n")
+                    execute_order(competitor, high_priority_order, moveit_runner_kitting, moveit_runner_gantry, empty_bins, True, False, sensor_black_out)
+                    execute_h_order = False
+                    moveit_runner_kitting.go_home()
+                    if(sensor_black_out):
+                        all_known_objects = current_parts_kitting
+                    else:
+                        all_known_objects = get_object_pose_in_workcell()
+                    unique_product_types = []
+                    for product in products:
+                        if product.type not in unique_product_types:
+                            unique_product_types.append(product.type)
+
+                    counter = 0
+                    for product_type in unique_product_types:
+                        counter = 0
+                        candidate_types[product_type] = {}
+                        candidate_parts = {}
+                        for part_in_workcell in all_known_objects:
+                            if product_type == part_in_workcell.type:
+                                counter += 1
+                                candidate_parts[product_type +
+                                                str(counter)] = [part_in_workcell]
+                        candidate_types[product_type] = candidate_parts
+                    
+
+                product = products.pop()
+                quatenion = (
+                    product.pose.orientation.x,
+                    product.pose.orientation.y,
+                    product.pose.orientation.z,
+                    product.pose.orientation.w,
+                )
+                _, product_init = candidate_types[product.type].popitem()
+                
+                product_init = product_init[0]
+                current_parts_kitting.remove(product_init)
+                product_goal = get_target_world_pose(
+                    product, active_agv)
+                product_vessel = get_object_location(all_known_objects, product)
+                target_bin = product_vessel
+                fail = False
+                if("pump" in product.type):
+                    if(3.15 > abs(euler_from_quaternion(quatenion)[0]) > 3.14):
+                        print("\n")
+                        rospy.logwarn("Part Needs to be flipped")
+                        print("\n")
+                        current_bin_number = int(product_vessel[-1])
+                        if(current_bin_number > 4):
+                            target_bin = empty_bins[1][-1]
+                        else:
+                            target_bin = empty_bins[1][0]
+                        
+                        empty_bin = empty_bins[0][target_bin]
+
+
+                        product_goal_quat = (
+                            product_goal.pose.orientation.x,
+                            product_goal.pose.orientation.y,
+                            product_goal.pose.orientation.z,
+                            product_goal.pose.orientation.w,
+                        )
+                        original_product_goal =  euler_from_quaternion(product_goal_quat)
+                            
+                        new0_goal = copy.deepcopy(product_goal)
+                        quaternion0 = quaternion_from_euler(0, 0, 0)
+                        new0_goal.pose.position.x = empty_bin[0]
+                        new0_goal.pose.orientation.x = quaternion0[0]
+                        new0_goal.pose.orientation.y = quaternion0[1]
+                        new0_goal.pose.orientation.z = quaternion0[2]
+                        new0_goal.pose.orientation.w = quaternion0[3]
+                        new0_goal.pose.position.y = empty_bin[1]
+                        fail = moveit_runner_kitting.move_part(
+                            product.type,
+                            product_vessel,
+                            product_init,
+                            new0_goal,
+                            target_bin, flip_part=True)
+
+                        if(not fail):
+                            new1_goal = copy.deepcopy(new0_goal)
+                            quaternion1 = quaternion_from_euler((math.pi)/-2, original_product_goal[1], original_product_goal[2])
+                            product_init = find_flipped_part_pose((target_bin, empty_bin), product.type)
+                            # product_init.pose.position.x -= 0.07
+                            # new1_goal.pose.position.x += 0.07
+                            new1_goal.pose.position.x = empty_bin[0]
+                            new1_goal.pose.orientation.x = quaternion1[0]
+                            new1_goal.pose.orientation.y = quaternion1[1]
+                            new1_goal.pose.orientation.z = quaternion1[2]
+                            new1_goal.pose.orientation.w = quaternion1[3]
+                            new1_goal.pose.position.y = empty_bin[1]
+                            fail = moveit_runner_kitting.move_part(
+                                product.type,
+                                target_bin,
+                                product_init,
+                                new1_goal,
+                                target_bin, flip_part=True, backup=[(target_bin, empty_bin), product.type])
+                            
+                            
+                            
+                            new2_goal = copy.deepcopy(new1_goal)
+                            quaternion2 = quaternion_from_euler((math.pi)/-1, original_product_goal[1], original_product_goal[2])
+                            product_init = find_flipped_part_pose((target_bin, empty_bin), product.type)
+                            # product_init.pose.position.y -= 0.07
+                            # new2_goal.pose.position.x += 0.07
+                            new2_goal.pose.position.x = empty_bin[0]
+                            new2_goal.pose.orientation.x = quaternion2[0]
+                            new2_goal.pose.orientation.y = quaternion2[1]
+                            new2_goal.pose.orientation.z = quaternion2[2]
+                            new2_goal.pose.orientation.w = quaternion2[3]
+                            new2_goal.pose.position.y = empty_bin[1]
+
+                            fail = moveit_runner_kitting.move_part(
+                                product.type,
+                                target_bin,
+                                product_init,
+                                new2_goal,
+                                target_bin, flip_part=True, backup=[(target_bin, empty_bin), product.type])
+
+
+                            product_init = find_flipped_part_pose((target_bin, empty_bin), product.type)
+                            # quaternion3 = quaternion_from_euler((math.pi)/-1, original_product_goal[1], original_product_goal[2])
+                            # product_init.pose.position.y += 0.05
+                            # product_goal.pose.position.y += 0.05
+                            # product_goal.pose.orientation.x = quaternion2[0]
+                            # product_goal.pose.orientation.y = quaternion2[1]
+                            # product_goal.pose.orientation.z = quaternion2[2]
+                            # product_goal.pose.orientation.w = quaternion2[3]
+                        
+                if(not fail):
+                    fail = moveit_runner_kitting.move_part(
+                        product.type,
+                        target_bin,
+                        product_init,
+                        product_goal,
+                        active_agv, backup=[(target_bin, empty_bin), product.type])
+                
+                if(fail):
+                    products.append(product)
+                    
+
+            competitor.submit_kitting_shipment(active_agv,
+                                           assembly_station,
+                                           shipment_type)
+        # The following is not needed, the competition
+        # will end automatically when all shipments have been submitted
+        # competitor.stop_competition()
+
+        for shipment in order.assembly_shipments:
+            if(sensor_black_out):
+                all_known_objects = current_parts_assembly
+            else:
+                all_known_objects = get_object_pose_in_agvs()
+            
+
+            shipment_type = shipment.shipment_type
+            # retrieve the assembly station to submit the agv
+            assembly_station = shipment.station_id
+
+            products = competitor.process_assembly_shipment(shipment)
+
+            
+            unique_product_types = []
+
+            for product in products:
+                if product.type not in unique_product_types:
+                    unique_product_types.append(product.type)
+
+            counter = 0
+            for product_type in unique_product_types:
+                counter = 0
+                candidate_types[product_type] = {}
+                candidate_parts = {}
+                for part_in_workcell in all_known_objects:
+                    if product_type == part_in_workcell.type:
+                        counter += 1
+                        candidate_parts[product_type +
+                                        str(counter)] = [part_in_workcell]
+                candidate_types[product_type] = candidate_parts
+            
+            while(len(products) != 0):
+                if(high_priority_order and execute_h_order):
+                    high_priority_order = list()
+                    high_priority_order.append(competitor.orders.pop())
+                    
+                    print("High Priority Order Detected")
+                    execute_order(competitor, high_priority_order,None, moveit_runner_gantry, True, False)
+
+                    execute_h_order = False
+                    moveit_runner_gantry.go_home()
+                    all_known_objects = get_object_pose_in_agvs()
+                    
+
+                    unique_products = []
+                    for prod in products:
+                        if prod.type not in unique_products:
+                            unique_products.append(prod.type)
+                    
+                    counter = 0
+                    for prod_type in unique_products:
+                        counter = 0
+                        candidate_types[prod_type] = {}
+                        candidate_parts = {}
+                        for workcell_parts in all_known_objects:
+                            if prod_type == workcell_parts.type:
+                                counter += 1
+                                candidate_parts[prod_type +
+                                                str(counter)] = [workcell_parts]
+                        candidate_types[prod_type] = candidate_parts
+
+                prod = products.pop()
+                _, prod_init = candidate_types[prod.type].popitem()
+                prod_init = prod_init[0]
+                prod_goal = get_assembly_target_world_pose(prod, assembly_station)
+                
+                # print("product_goal", prod_goal)  ## ('product_goal', type: "assembly_sensor_red andn pose" why?          
+                prod_vessel = get_assembly_object_location(all_known_objects, prod)
+                # print(prod_vessel)
+                # print("product_vessel", prod_vessel)  
+
+                
+                fail = moveit_runner_gantry.move_part(
+                                                prod.type,
+                                                prod_vessel,
+                                                prod_init,
+                                                prod_goal,
+                                                assembly_station,robot_type='gantry')
+                
+                if(fail):
+                    products.append(prod)
+                    
+
+            competitor.submit_assembly_shipment(assembly_station,
+                                           shipment_type)
+
+
+
+            
+
+
+
+
+def find_flipped_part_pose(bin, part):
+    logical_camera_for_bins = {
+        "bin1": "/ariac/logical_camera_1",
+        "bin2": "/ariac/logical_camera_1",
+        "bin3": "/ariac/logical_camera_1",
+        "bin4": "/ariac/logical_camera_1",
+        "bin5": "/ariac/logical_camera_2",
+        "bin6": "/ariac/logical_camera_3",
+        "bin7": "/ariac/logical_camera_3",
+        "bin8": "/ariac/logical_camera_2"
+    }
+    
+    tf_buffer = tf2_ros.Buffer()
+    tf_listener = tf2_ros.TransformListener(tf_buffer)
+
+    rospy.wait_for_message(logical_camera_for_bins[bin[0]], LogicalCameraImage)
+
+    # e.g., logical_camera_1_assembly_pump_red_1
+    camera_frame_format = r"logical_camera_[0-9]+_(\w+)_[0-9]+_frame"
+    all_frames = yaml.safe_load(tf_buffer.all_frames_as_yaml()).keys()
+    part_frames = [f for f in all_frames if re.match(camera_frame_format, f)]
+
+    objects = []
+    for frame in part_frames:
+        try:
+            world_tf = tf_buffer.lookup_transform(
+                'world',
+                frame,
+                rospy.Time(),
+                rospy.Duration(0.1)
+            )
+        except (tf2_ros.LookupException, tf2_ros.ExtrapolationException) as e:
+            continue
+
+        # remove stale transforms
+        tf_time = rospy.Time(
+            world_tf.header.stamp.secs,
+            world_tf.header.stamp.nsecs
+        )
+        if rospy.Time.now() - tf_time > rospy.Duration(1.0):
+            continue
+
+        if(re.match(camera_frame_format, frame).group(1) == part):
+            model = Model()
+            model.type = re.match(camera_frame_format, frame).group(1)
+            model.pose.position = world_tf.transform.translation
+            model.pose.orientation = world_tf.transform.rotation
+            if(abs(abs(bin[1][0]) - abs(model.pose.position.x)) < 0.3 and abs(abs(bin[1][1]) - abs(model.pose.position.y)) < 0.3):
+                return(model)
+       
+def get_assembly_object_location(all_known_objects, obj):
+    agv_locations = { 
+        "agv1_at_as1": (-5.6,   4.67),
+        "agv1_at_as2": (-10.59, 4.67),
+        "agv2_at_as1": (-5.6,   1.36),
+        "agv2_at_as2": (-10.59, 1.36),
+        "agv3_at_as3": (-5.6,  -1.33),
+        "agv3_at_as4": (-10.59,-1.33),
+        "agv4_at_as3": (-5.6,  -4.69),
+        "agv4_at_as4": (-10.59,-4.69)
+        } 
+    all_parts = get_init_world_pose(all_known_objects, obj)
+    for part in all_parts:
+        # match_string_list = part.type.split("_")
+        # match_string = "_".join(match_string_list[1:-1])
+        if(part.type == obj.type):
+            desired_part = part.pose
+
+    for key, value in agv_locations.items():
+        if(abs(abs(value[0]) - abs(desired_part.position.x)) < 0.3 and abs(abs(value[1]) - abs(desired_part.position.y)) < 0.3):
+            return(key)
+
+def get_object_location(all_known_objects, obj):
+    """
+    Get vessels (bins, agvs, briefcases) where a specific object can be found.
+    This function will not work in competition mode.
+
+    Args:
+        obj (Part): Find the bin
+        where this object can be found.
+
+    Returns:
+        str: Bin or table where the object was found
+    """
+
+    # This service only works in --development-mode
+    bins = { 
+        "bin1": (-1.9,3.38),
+        "bin2": (-1.9,2.56),
+        "bin3": (-2.65,2.56),
+        "bin4": (-2.65,3.38),
+        "bin5": (-1.9,-3.38),
+        "bin6": (-1.9,-2.56),
+        "bin7": (-2.65,-2.56),
+        "bin8": (-2.65,-3.38)
+        } 
+    all_parts = get_init_world_pose(all_known_objects, obj)
+    # print(all_parts)
+    for part in all_parts:
+        # match_string_list = part.type.split("_")
+        # match_string = "_".join(match_string_list[1:-1])
+        if(part.type == obj.type):
+            desired_part = part.pose
+
+    for key, value in bins.items():
+        if(abs(abs(value[0]) - abs(desired_part.position.x)) < 0.3 and abs(abs(value[1]) - abs(desired_part.position.y)) < 0.3):
+            return(key)
+
+def get_object_pose_in_agvs():
+    tf_buffer = tf2_ros.Buffer()
+    tf_listener = tf2_ros.TransformListener(tf_buffer)
+
+    # wait for all cameras to be broadcasting
+    all_topics = rospy.get_published_topics()
+    #  NOTE: This will not work if your logical cameras are named differently
+    camera_topics = [t for t, _ in all_topics if '/ariac/logical_camera_agv' in t]
+    for topic in camera_topics:
+        rospy.wait_for_message(topic, LogicalCameraImage)
+    
+    
+    camera_frame_format = r"logical_camera_agv_[0-9]+_(\w+)_[0-9]+_frame"
+    all_frames = yaml.safe_load(tf_buffer.all_frames_as_yaml()).keys()
+    part_frames = [f for f in all_frames if re.match(camera_frame_format, f)]
+
+
+    objects = []
+    for frame in part_frames:
+        try:
+            world_tf = tf_buffer.lookup_transform(
+                'world',
+                frame,
+                rospy.Time(),
+                rospy.Duration(0.1)
+            )
+        except (tf2_ros.LookupException, tf2_ros.ExtrapolationException) as e:
+            continue
+
+        # remove stale transforms
+        tf_time = rospy.Time(
+            world_tf.header.stamp.secs,
+            world_tf.header.stamp.nsecs
+        )
+        if rospy.Time.now() - tf_time > rospy.Duration(1.0):
+            continue
+
+        model = Model()
+        model.type = re.match(camera_frame_format, frame).group(1)
+        model.pose.position = world_tf.transform.translation
+        model.pose.orientation = world_tf.transform.rotation
+        objects.append(model)
+        global current_parts_assembly
+        current_parts_assembly = objects
+        
+        
+    return objects
+    
+
+def get_object_pose_in_workcell():
+    """
+   Get the world pose of each object found by cameras,
+   including parts and movable trays
+
+   Note, logical cameras must be named using the convention:
+   logical_camera_x
+
+    Returns:
+        list: A list of all the objects found
+    """
+    tf_buffer = tf2_ros.Buffer()
+    tf_listener = tf2_ros.TransformListener(tf_buffer)
+
+    # wait for all cameras to be broadcasting
+    all_topics = rospy.get_published_topics()
+    #  NOTE: This will not work if your logical cameras are named differently
+    camera_topics = [t for t, _ in all_topics if '/ariac/logical_camera' in t]
+    for topic in camera_topics:
+        rospy.wait_for_message(topic, LogicalCameraImage)
+
+    # e.g., logical_camera_1_assembly_pump_red_1
+    camera_frame_format = r"logical_camera_[0-9]+_(\w+)_[0-9]+_frame"
+    all_frames = yaml.safe_load(tf_buffer.all_frames_as_yaml()).keys()
+    part_frames = [f for f in all_frames if re.match(camera_frame_format, f)]
+
+
+    objects = []
+    for frame in part_frames:
+        try:
+            world_tf = tf_buffer.lookup_transform(
+                'world',
+                frame,
+                rospy.Time(),
+                rospy.Duration(0.1)
+            )
+        except (tf2_ros.LookupException, tf2_ros.ExtrapolationException) as e:
+            continue
+
+        # remove stale transforms
+        tf_time = rospy.Time(
+            world_tf.header.stamp.secs,
+            world_tf.header.stamp.nsecs
+        )
+        if rospy.Time.now() - tf_time > rospy.Duration(1.0):
+            continue
+
+        model = Model()
+        model.type = re.match(camera_frame_format, frame).group(1)
+        model.pose.position = world_tf.transform.translation
+        model.pose.orientation = world_tf.transform.rotation
+        objects.append(model)
+        global current_parts_kitting
+        current_parts_kitting = objects
+        
+        
+    return objects
+
+
+def get_init_world_pose(all_known_objects, part):
+    objects = []
+    for obj in all_known_objects:
+        if(obj.type == part.type):
+            objects.append(obj)
+    return objects
+
+
+
+def get_assembly_target_world_pose(target, station):
+    tf_buffer = tf2_ros.Buffer(rospy.Duration(3.0))
+    tf2_ros.TransformListener(tf_buffer)
+    tf_broadcaster = tf2_ros.StaticTransformBroadcaster()
+    h_frame = ''
+
+    if station == 'as1':
+        h_frame = 'briefcase_1'
+    elif station == 'as2':
+        h_frame = 'briefcase_2'
+    elif station == 'as3':
+        h_frame = 'briefcase_3'
+    elif station == 'as4':
+        h_frame = 'briefcase_4'
+
+    tf_msg = TransformStamped()
+    tf_msg.header.frame_id = ''
+    if h_frame:
+        tf_msg.header.frame_id = h_frame
+    else:
+        assert(h_frame), "No Station provided"
+    
+
+    tf_msg.header.stamp = rospy.Time()
+    tf_msg.child_frame_id = 'target_frame'
+    tf_msg.transform.translation = target.pose.position
+    tf_msg.transform.rotation = target.pose.orientation
+
+    # Broadcast the frame target_frame as a child of h_frame
+    for _ in range(5):
+        tf_broadcaster.sendTransform(tf_msg)
+
+    world_target_tf = TransformStamped()
+    # Get the transform between world and target_frame
+
+    for _ in range(20):
+        try:
+            world_target_tf = tf_buffer.lookup_transform(
+                'world', 'target_frame', rospy.Time(), rospy.Duration(0.5))
+        except (tf2_ros.LookupException,
+                tf2_ros.ConnectivityException,
+                tf2_ros.ExtrapolationException) as e:
+            print(e)
+            rospy.logerr("Unable to lookup transform")
+
+    world_target = copy.deepcopy(target)
+    world_target.pose.position = world_target_tf.transform.translation
+    world_target.pose.orientation = world_target_tf.transform.rotation
+    return world_target
+
+def get_target_world_pose(target, agv):
+    tf_buffer = tf2_ros.Buffer(rospy.Duration(3.0))
+    tf2_ros.TransformListener(tf_buffer)
+    tf_broadcaster = tf2_ros.StaticTransformBroadcaster()
+    h_frame = ''
+
+    if agv == 'agv1':
+        h_frame = 'kit_tray_1'
+    elif agv == 'agv2':
+        h_frame = 'kit_tray_2'
+    elif agv == 'agv3':
+        h_frame = 'kit_tray_3'
+    elif agv == 'agv4':
+        h_frame = 'kit_tray_4'
+
+    tf_msg = TransformStamped()
+    tf_msg.header.frame_id = ''
+    if h_frame:
+        tf_msg.header.frame_id = h_frame
+    else:
+        assert(h_frame), "No AGV provided"
+
+    tf_msg.header.stamp = rospy.Time()
+    tf_msg.child_frame_id = 'target_frame'
+    tf_msg.transform.translation = target.pose.position
+    tf_msg.transform.rotation = target.pose.orientation
+
+    # Broadcast the frame target_frame as a child of h_frame
+    for _ in range(5):
+        tf_broadcaster.sendTransform(tf_msg)
+
+    world_target_tf = TransformStamped()
+    # Get the transform between world and target_frame
+
+    for _ in range(20):
+        try:
+            world_target_tf = tf_buffer.lookup_transform(
+                'world', 'target_frame', rospy.Time(), rospy.Duration(0.5))
+        except (tf2_ros.LookupException,
+                tf2_ros.ConnectivityException,
+                tf2_ros.ExtrapolationException):
+            rospy.logerr("Unable to lookup transform")
+
+    world_target = copy.deepcopy(target)
+    world_target.pose.position = world_target_tf.transform.translation
+    world_target.pose.orientation = world_target_tf.transform.rotation
+    return world_target
+
+
+class MoveitRunner():
+
+    def __init__(self, group_names, node_name='ariac_moveit_example', ns='',
+                 robot_description='robot_description'):
+        mc.roscpp_initialize(sys.argv)
+        rospy.init_node(node_name, anonymous=True)
+
+        self.gantry_status_publisher = rospy.Publisher(
+            '/my/gantry_status', String, queue_size=10)
+        self.gantry_status_subscriber = rospy.Subscriber(
+            "/my/gantry_status", String, self.gantry_status_callback)
+        self.gantry_status = ""
+
+        self.robot = mc.RobotCommander(ns + '/' + robot_description, ns)
+        self.scene = mc.PlanningSceneInterface(ns)
+        self.groups = {}
+        for group_name in group_names:
+            group = mc.MoveGroupCommander(
+                group_name,
+                robot_description=ns + '/' + robot_description,
+                ns=ns
+            )
+            group.set_goal_tolerance(0.05)
+            self.groups[group_name] = group
+
+        self.set_ariac_specs()
+        self.go_home()
+
+    def gantry_status_callback(self, msg):
+        self.gantry_status = msg.data
+
+    def go_home(self):
+        for key in self.groups:
+
+            if 'gantry' in key:
+                self.goto_preset_location('home', robot_type="gantry_robot")
+            elif 'kitting' in key:
+                self.goto_preset_location('home', robot_type="kitting_robot")
+
+    def load_preset_locations(self):
+        """
+        Return the path of the file containing specs for
+        pick-and-place
+        """
+        # i.e. /path/to/dir/kitting_commander_node.py
+        current_file = os.path.abspath(__file__)
+        current_dir = os.path.split(current_file)[0]
+        test_competitor_dir = os.path.split(current_dir)[0]
+        specs_path = "config/robot_workcell_specs.yaml"
+        return os.path.join(test_competitor_dir, specs_path)
+
+    def set_ariac_specs(self):
+        '''
+        Static file with preset locations for easy navigation.
+        This file also contains specs for bins that may be useful
+        for pick-and-place
+        '''
+
+        ariac_specs_file = self.load_preset_locations()
+
+        # Read YAML file
+        with open(ariac_specs_file, 'r') as stream:
+            data_loaded = yaml.safe_load(stream)
+
+        locations = {}
+        part_heights = {}
+        bin_height = None
+        agv_height = None
+
+        for key, value in data_loaded.items():
+            if key in "preset_locations":
+                for loc, group in value.items():
+                    kitting_arm = group['kitting_arm']
+                    gantry_full = group['gantry_full']
+                    gantry_torso = group['gantry_torso']
+                    gantry_arm = group['gantry_arm']
+                    locations[loc] = (
+                        kitting_arm, gantry_full, gantry_torso, gantry_arm)
+            if key in "bins":
+                bin_height = value["height"]
+            if key in "agvs":
+                agv_height = value["height"]
+            if key in "parts":
+                for part, part_h in value.items():
+                    part_name = part
+                    part_height = part_h["height"]
+                    part_heights[part_name] = part_height
+
+        self.locations = locations
+        self.part_heights = part_heights
+        self.agv_height = agv_height
+        self.bin_height = bin_height
+
+    def goto_preset_location(self, location_name, robot_type="kitting_robot", rotate=False, inv_rotate=False, pre=False):
+
+        group = None
+        if robot_type == 'kitting_robot':
+            group = self.groups['kitting_arm']
+        elif robot_type == 'gantry_robot':
+            group = self.groups['gantry_full']
+
+        kitting_arm, gantry_full, gantry_torso, gantry_arm = self.locations[location_name]
+        location_pose = group.get_current_joint_values()
+
+        if robot_type == 'kitting_robot':
+            location_pose[:] = kitting_arm
+        elif robot_type == 'gantry_robot':
+            location_pose[:] = gantry_full
+            location_pose[:3] = gantry_torso
+            location_pose[3:] = gantry_arm
+        if(rotate):
+            location_pose[2] = -1.57
+        if(inv_rotate):
+            location_pose[2] = 3.14
+        if(pre):
+            location_pose[0] += 1.27
+
+        # If the robot controller reports a path tolerance violation,
+        # this will automatically re-attempt the motion
+        MAX_ATTEMPTS = 20
+        attempts = 0
+        while not group.go(location_pose, wait=True):
+            attempts += 1
+            assert(attempts < MAX_ATTEMPTS)
+
+    def move_part(self,
+                  part_type,
+                  part_init_vessel,
+                  part_init_pose,
+                  part_target_pose,
+                  agv, robot_type='kitting', dump=False, flip_part=False, backup = None):
+        """
+        Move a part from a bin (part_init_vessel) to an AGV (agv)
+
+        Args:
+            part_type (str): Type of the part (e.g., assembly_sensor_red)
+            part_init_vessel (str): location unit (e.g., bin1)
+            part_init_pose: Pose of the part in bin (world frame)
+            part_target_pose: Pose of the part on AGV (world frame)
+            agv (str): AGV to place the part
+
+        Returns:
+            bool: True if the part was successfully moved
+        """
+        
+        
+        z_pos = self.part_heights[part_type] + 0.01
+        if(dump):
+            z_pos += 0.04
+        if(robot_type == 'gantry'):
+            # print("gantry offset")
+            z_pos += 0.04
+
+        # This example uses the kitting robot only
+        if robot_type == 'kitting':
+            group = self.groups['kitting_arm']
+        elif robot_type == 'gantry':
+            group = self.groups['gantry_full']
+
+        # group = self.groups[robot_type+'_arm']
+        gm = GripperManager(ns='/ariac/'+robot_type+'/arm/gripper/')
+
+        # compute the relative rotation between part pose in bin and tray
+        try:
+            rel_rot_q = self.compute_relative_rotation(
+            part_init_pose.pose, part_target_pose.pose)
+        except:
+            rospy.logwarn("Retrying")
+            print(backup[0], backup[1])
+            part_init_pose = find_flipped_part_pose(backup[0], backup[1])
+            rel_rot_q = self.compute_relative_rotation(
+            part_init_pose.pose, part_target_pose.pose)
+
+        # group.set_goal_orientation_tolerance = 0.02
+        # group.set_goal_position_tolerance = 0.02
+
+        # Make sure the end effector is flat
+        # otherwise it will have a hard time attaching a part
+        flat_orientation = euler_to_quaternion(0, 1.57, 0)
+        ee_pose = group.get_current_pose().pose
+        ee_pose.orientation = flat_orientation
+        
+        # pre-grasp pose
+        near_pick_pose = copy.deepcopy(part_init_pose.pose)
+        near_pick_pose.orientation = ee_pose.orientation
+        near_pick_pose.position.z = z_pos + 0.03  
+        # grasp pose
+        pick_pose = copy.deepcopy(part_init_pose.pose)
+        pick_pose.orientation = ee_pose.orientation
+        pick_pose.position.z = z_pos
+
+        # Activate the gripper and make sure it is activated
+        gripper_status = gm.activate_gripper()
+        if not gripper_status:
+            assert(gm.activate_gripper()), "Could not activate gripper"
+
+        # Move the arm next to a bin
+        self.goto_preset_location(part_init_vessel, robot_type=robot_type + "_robot", pre=True)
+        # self.goto_preset_location(part_init_vessel, robot_type=robot_type + "_robot")
+        # velocity_scaling_factor = 1.0  # default is 1.0
+        path = [near_pick_pose, pick_pose]
+        (plan, partial) = group.compute_cartesian_path(path, 0.001, 0.0)
+        if(robot_type == 'gantry'):
+            group.execute(plan, wait=True)
+        else:
+            if(partial > 0.9):
+                group.execute(plan, wait=True)
+            else:
+                return True
+        
+        while not gm.is_object_attached():
+            gripper_status = gm.activate_gripper()
+            if not gripper_status:
+                assert(gm.activate_gripper()), "Could not activate gripper"
+            pick_pose.position.z -= 0.001
+            plan, _ = group.compute_cartesian_path(
+                [pick_pose], 0.001, 0.0)
+            
+            group.execute(plan, wait=True)
+            rospy.sleep(0.5)
+
+        # Once the part is attached
+        # Lift the arm
+        if(robot_type == 'gantry'):
+            pick_pose.position.z += 0.5
+        else:
+            pick_pose.position.z += 1
+        plan, _ = group.compute_cartesian_path(
+            [pick_pose], 0.01, 0.0,)
+        group.execute(plan, wait=True)
+
+        if(robot_type == 'gantry'):
+            self.goto_preset_location(part_init_vessel, robot_type=robot_type + "_robot", rotate=True)
+        
+        # Move to preset locations
+        # self.goto_preset_location(part_init_vessel)
+        self.goto_preset_location(part_init_vessel, robot_type=robot_type + "_robot", pre=True)
+        self.goto_preset_location(agv, robot_type=robot_type + "_robot")
+
+        # ee_pose = group.get_current_pose().pose
+
+        q_current = quaternion_from_euler(0, 0, 0)
+        q_current[0] = ee_pose.orientation.x
+        q_current[1] = ee_pose.orientation.y
+        q_current[2] = ee_pose.orientation.z
+        q_current[3] = ee_pose.orientation.w
+
+        ee_pose_q = quaternion_multiply(rel_rot_q, q_current)
+
+        # pose to place the part
+        place_pose = copy.deepcopy(part_target_pose.pose)
+        place_pose.orientation.x = ee_pose_q[0]
+        place_pose.orientation.y = ee_pose_q[1]
+        place_pose.orientation.z = ee_pose_q[2]
+        place_pose.orientation.w = ee_pose_q[3]
+        place_pose.position.z += 0.2
+
+        
+        path = [place_pose]
+        self.cartesian_move(group, path)
+
+        gm.deactivate_gripper()
+            
+        if(robot_type == 'gantry'):
+            self.goto_preset_location(agv, robot_type=robot_type + "_robot", inv_rotate=True)
+        rospy.sleep(0.5)
+
+        faulty_part = False
+        if(not dump and not flip_part):
+            data = rospy.wait_for_message("/ariac/quality_control_sensor_" + agv[-1], LogicalCameraImage)
+            if(len(data.models) > 0):
+                print("\n")
+                rospy.loginfo("Faulty Part Detected: "+ part_type)
+                rospy.logwarn("Discarding faulty part")
+                print("\n")
+                faulty_part = True
+                faulty_dump = copy.deepcopy(part_target_pose)
+                faulty_dump.pose.position.x = -2.186
+                faulty_dump.pose.position.y = 0
+                faulty_dump.pose.position.z += 0.3
+                fault_pick = copy.deepcopy(part_target_pose)
+                fault_pick.pose.position.z = 1
+                self.move_part(part_type, agv, fault_pick, faulty_dump, part_init_vessel, dump=True)
+    
+        
+        return faulty_part
+
+            
+
+
+        # self.goto_preset_location('standby')
+        # self.goto_preset_location('bin1')
+        
+
+    def cartesian_move(self, group, waypoints):
+        (plan, fraction) = group.compute_cartesian_path(waypoints, 0.01, 0.0)
+        group.execute(plan, wait=True)
+
+    def compute_relative_rotation(self, init_pose, target_pose):
+        """
+        Compute the relative rotation between two poses.
+        This relative rotation will be applied to the current end effector
+        orientation.
+
+        Args:
+            init_pose (geometry_msgs.Pose): Pose of the part in the bin
+            target_pose (geometry_msgs.Pose): Pose of the part in the tray
+        """
+
+        quat_init_inv = [init_pose.orientation.x,
+                         init_pose.orientation.y,
+                         init_pose.orientation.z,
+                         -init_pose.orientation.w]  # Negate for inverse
+
+        quat_target = [target_pose.orientation.x,
+                       target_pose.orientation.y,
+                       target_pose.orientation.z,
+                       target_pose.orientation.w]
+
+        q_relative_rotation = quaternion_multiply(quat_target, quat_init_inv)
+
+        return q_relative_rotation
+
+
+def main():
+
+    # Define MoveIt groups
+    kitting_group_names = ['kitting_arm']
+    gantry_group_names = ['gantry_full', 'gantry_arm', 'gantry_torso']
+
+    # Instances of MoveitRunner for both robots
+    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    # Do not modify the value of the ns parameters
+    moveit_runner_kitting = MoveitRunner(
+        kitting_group_names, ns='/ariac/kitting')
+    moveit_runner_gantry = MoveitRunner(gantry_group_names, ns='/ariac/gantry')
+    moveit_runner_gantry.gantry_status_publisher.publish("init")
+
+    competitor = Competitor()
+    # Start the competition
+    competitor.start_competition()
+    sensor_black_out = isBlackoutTriggered()
+    # Wait for order to be recieved
+    r = rospy.Rate(10)
+    while not competitor.received_order:
+        r.sleep()
+    orders = copy.deepcopy(competitor.orders)
+    part_type, count = addmoreparts(competitor, orders)
+    if(count != 0 and part_type != ""):
+        belt_pickup(moveit_runner_kitting, moveit_runner_gantry, part_type, count)
+    
+    all_known_objects = get_object_pose_in_workcell()
+    empty_bins_object = detect_empty_bins(all_known_objects)
+    empty_bins_keys = sorted(empty_bins_object.keys())
+    empty_bins = (empty_bins_object, empty_bins_keys)
+    
+    # assuming agv is any, we select agv1 to be the default agv
+    
+    execute_order(competitor, competitor.orders, moveit_runner_kitting, moveit_runner_gantry, empty_bins, sensor_black_out=sensor_black_out)
+
+
+
+   
+
+
+if __name__ == '__main__':
+    main()
